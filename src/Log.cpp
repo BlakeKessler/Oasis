@@ -1,8 +1,12 @@
 //
 // Created by Matthew McCall on 10/6/23.
+// Modified by Blake Kessler on 10/10/23
 //
 
 #include "Oasis/Log.hpp"
+#include "Oasis/Undefined.hpp"
+#include "Oasis/Expression.hpp"
+#include <cmath>
 
 namespace Oasis {
 Log<Expression>::Log(const Expression& base, const Expression& argument)
@@ -12,10 +16,39 @@ Log<Expression>::Log(const Expression& base, const Expression& argument)
 
 auto Log<Expression>::Simplify() const -> std::unique_ptr<Expression>
 {
-    return Copy();
+    auto simplifiedBase = mostSigOp ? mostSigOp->Simplify() : nullptr;
+    auto simplifiedArgument = leastSigOp ? leastSigOp->Simplify() : nullptr;
+
+    Log simplifiedLog { *simplifiedBase, *simplifiedArgument };
+
+    if (auto invalidBaseCase = Log<Real, Expression>::Specialize(simplifiedLog); invalidBaseCase != nullptr) {
+        const Real& b = invalidBaseCase->GetMostSigOp();
+
+        if (b.GetValue() <= 0.0 || b.GetValue() == 1) {
+            return std::make_unique<Undefined>(); //undefined not implemented
+        }
+    }
+
+    if (auto invalidArgumentCase = Log<Expression, Real>::Specialize(simplifiedLog); invalidArgumentCase != nullptr) {
+        const Expression& base = invalidArgumentCase->GetMostSigOp();
+        const Real& argument = invalidArgumentCase->GetLeastSigOp();
+
+        if (argument.GetValue() <= 0.0 ) {
+            return std::make_unique<Undefined>(); //undefined not implemented
+        }
+    }
+
+    if (auto realCase = Log<Real, Real>::Specialize(simplifiedLog); realCase != nullptr) {
+        const Real& base = realCase->GetMostSigOp();
+        const Real& argument = realCase->GetLeastSigOp();
+
+        return std::make_unique<Real>(log2(argument.GetValue()) * (1 / log2(base.GetValue())));
+    }
+
+    return simplifiedLog.Copy();
 }
 
-auto Log<Expression>::Simplify(tf::Subflow& subflow) const -> std::unique_ptr<Expression>
+auto Log<Expression>::Simplify(tf::Subflow& subflow) const -> std::unique_ptr<Expression> //ask for explanation
 {
     return Copy(subflow);
 }
