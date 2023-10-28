@@ -6,6 +6,8 @@
 #include "Oasis/Log.hpp"
 #include "Oasis/Undefined.hpp"
 #include "Oasis/Expression.hpp"
+#include "Oasis/Exponent.hpp"
+#include "Oasis/Multiply.hpp"
 #include <cmath>
 
 namespace Oasis {
@@ -19,13 +21,17 @@ auto Log<Expression>::Simplify() const -> std::unique_ptr<Expression>
     auto simplifiedBase = mostSigOp ? mostSigOp->Simplify() : nullptr;
     auto simplifiedArgument = leastSigOp ? leastSigOp->Simplify() : nullptr;
 
+    if (!simplifiedBase || !simplifiedArgument) {
+        return nullptr;
+    }
+
     Log simplifiedLog { *simplifiedBase, *simplifiedArgument };
 
     if (auto invalidBaseCase = Log<Real, Expression>::Specialize(simplifiedLog); invalidBaseCase != nullptr) {
         const Real& b = invalidBaseCase->GetMostSigOp();
 
         if (b.GetValue() <= 0.0 || b.GetValue() == 1) {
-            return std::make_unique<Undefined>(); //undefined not implemented
+            return std::make_unique<Undefined>();
         }
     }
 
@@ -34,7 +40,7 @@ auto Log<Expression>::Simplify() const -> std::unique_ptr<Expression>
         const Real& argument = invalidArgumentCase->GetLeastSigOp();
 
         if (argument.GetValue() <= 0.0 ) {
-            return std::make_unique<Undefined>(); //undefined not implemented
+            return std::make_unique<Undefined>();
         }
     }
 
@@ -43,6 +49,13 @@ auto Log<Expression>::Simplify() const -> std::unique_ptr<Expression>
         const Real& argument = realCase->GetLeastSigOp();
 
         return std::make_unique<Real>(log2(argument.GetValue()) * (1 / log2(base.GetValue())));
+    }
+
+    // log_a(b^x) = x * log_a(b)
+    if (auto expCase = Log<Expression, Exponent<Expression, Expression>>::Specialize(simplifiedLog); expCase != nullptr) {
+        const IExpression auto& log = Log<Expression>(expCase->GetMostSigOp(), expCase->GetLeastSigOp().GetMostSigOp()); //might need to check that it isnt nullptr
+        const IExpression auto& factor = expCase->GetLeastSigOp().GetLeastSigOp();
+        return std::make_unique<Multiply<Expression>>(factor, log);
     }
 
     return simplifiedLog.Copy();
